@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http: https: data: gap: ws: 'unsafe-inline' 'unsafe-eval'; 
+        media-src * 'unsafe-inline' 'unsafe-eval' blob:; 
+        connect-src * 'unsafe-inline'; 
+        style-src 'self' 'unsafe-inline'; 
+        img-src 'self' data: content:;">
+    <title>Interview Recorder</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background: #f9f9f9;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: bold;
+        }
+        select, input[type="file"], textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+        }
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background: #2980b9;
+        }
+        .btn-primary {
+            background: #2ecc71;
+        }
+        .btn-primary:hover {
+            background: #27ae60;
+        }
+        .btn-danger {
+            background: #e74c3c;
+        }
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        .hidden {
+            display: none;
+        }
+        #videoPreview {
+            width: 100%;
+            max-width: 640px;
+            background: #000;
+            margin: 1rem 0;
+        }
+        .controls {
+            margin: 1.5rem 0;
+        }
+        #status {
+            margin: 1rem 0;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .question-display {
+            background: #e9f7fe;
+            padding: 1.5rem;
+            border-radius: 4px;
+            margin: 1.5rem 0;
+        }
+        .tab {
+            display: flex;
+            margin-bottom: 1rem;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab button {
+            background: none;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            font-size: 1rem;
+            border-bottom: 3px solid transparent;
+        }
+        .tab button.active {
+            border-bottom: 3px solid #3498db;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI-Powered Mock Interview</h1>
+        
+        <!-- Upload Section -->
+        <div id="uploadSection">
+            <h2>Start Your Interview</h2>
+            
+            <div class="tab">
+                <button class="tablinks active" onclick="openTab(event, 'resumeTab')">Upload Resume</button>
+                <button class="tablinks" onclick="openTab(event, 'jdTab')">Paste Job Description</button>
+            </div>
+            
+            <!-- Resume Upload Tab -->
+            <div id="resumeTab" class="tabcontent" style="display: block;">
+                <form id="resumeForm">
+                    <div class="form-group">
+                        <label for="resumeFile">Upload your resume (PDF/DOCX/TXT):</label>
+                        <input type="file" id="resumeFile" accept=".pdf,.docx,.txt" required />
+                        <p class="help-text">Supported formats: PDF, DOCX, TXT (max 5MB)</p>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Start Interview with Resume</button>
+                </form>
+            </div>
+            
+            <!-- Job Description Tab -->
+            <div id="jdTab" class="tabcontent">
+                <form id="jdForm">
+                    <div class="form-group">
+                        <label for="jobDescription">Or paste a job description:</label>
+                        <textarea id="jobDescription" placeholder="Paste the job description here..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Start Interview with Job Description</button>
+                </form>
+            </div>
+            
+            <div id="uploadStatus" class="status"></div>
+        </div>
+        
+        <!-- Interview Section (initially hidden) -->
+        <div id="interviewSection" class="hidden">
+            <h2>Interview in Progress</h2>
+            
+            <div class="question-display">
+                <div class="question-header">
+                    <h3>Question <span id="questionNumber">1</span> of <span id="totalQuestions">?</span></h3>
+                    <div class="question-meta">
+                        <span class="question-type" id="questionType">General</span>
+                        <span class="question-difficulty" id="questionDifficulty">Medium</span>
+                    </div>
+                </div>
+                <div class="question-content">
+                    <p id="questionText">Loading question...</p>
+                </div>
+            </div>
+            <style>
+                .question-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 15px;
+                }
+                .question-meta {
+                    display: flex;
+                    gap: 15px;
+                }
+                .question-type, .question-difficulty {
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    font-size: 0.85em;
+                    font-weight: 600;
+                }
+                .question-type {
+                    background-color: #e3f2fd;
+                    color: #1976d2;
+                }
+                .question-difficulty {
+                    background-color: #e8f5e9;
+                    color: #2e7d32;
+                }
+                .question-difficulty[data-difficulty="Easy"] {
+                    background-color: #e8f5e9;
+                    color: #2e7d32;
+                }
+                .question-difficulty[data-difficulty="Medium"] {
+                    background-color: #fff8e1;
+                    color: #f57f17;
+                }
+                .question-difficulty[data-difficulty="Hard"] {
+                    background-color: #ffebee;
+                    color: #c62828;
+                }
+                
+                /* Skip button styles */
+                .btn-skip {
+                    background-color: #6c757d;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    font-weight: 500;
+                    font-size: 0.9rem;
+                    margin: 0 5px;
+                }
+                
+                .btn-skip:hover:not(:disabled) {
+                    background-color: #5a6268;
+                    transform: translateY(-1px);
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                }
+                
+                .btn-skip:disabled {
+                    background-color: #d1d1d1;
+                    cursor: not-allowed;
+                    opacity: 0.7;
+                }
+                
+                .btn-skip:active:not(:disabled) {
+                    transform: translateY(0);
+                    box-shadow: none;
+                }
+                .question-content {
+                    background: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin: 10px 0;
+                }
+                #questionText {
+                    font-size: 1.1em;
+                    line-height: 1.6;
+                    margin: 0;
+                }
+            </style>
+            
+            <div class="video-container">
+                <video id="videoPreview" autoplay muted></video>
+                <div id="transcriptionContainer" style="margin-top: 20px; display: none;">
+                    <h4>Your Answer:</h4>
+                    <div id="transcription" style="background: #f5f5f5; padding: 15px; border-radius: 4px; min-height: 100px; margin-top: 10px; white-space: pre-wrap;">
+                        Transcribed text will appear here...
+                    </div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="startButton" class="btn">Start Recording</button>
+                <button id="stopButton" class="btn btn-danger" disabled>Stop Recording</button>
+                <button id="skipButton" class="btn btn-skip" style="display: none;">Skip Question</button>
+                <button id="nextButton" class="btn" disabled>Next Question</button>
+            </div>
+            
+            <div id="status" class="status"></div>
+            
+            <div class="progress">
+                <p>Progress: <span id="progress">0</span>% complete</p>
+                <div class="progress-bar">
+                    <div id="progressBar" style="width: 0%; height: 20px; background: #2ecc71;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="MediaRecorder.js"></script>
+    <script>
+        // Tab functionality
+        function openTab(evt, tabName) {
+            // Hide all tab content
+            const tabcontent = document.getElementsByClassName("tabcontent");
+            for (let i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].style.display = "none";
+            }
+            
+            // Remove active class from all tab buttons
+            const tablinks = document.getElementsByClassName("tablinks");
+            for (let i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            
+            // Show the current tab and mark button as active
+            document.getElementById(tabName).style.display = "block";
+            evt.currentTarget.className += " active";
+        }
+
+        // Global variables
+        let currentInterviewId = null;
+        let currentQuestionId = 1;
+        let totalQuestions = 0;
+        let videoRecorder = null;
+        let isSkipping = false;
+
+        // DOM Elements
+        const uploadSection = document.getElementById('uploadSection');
+        const interviewSection = document.getElementById('interviewSection');
+        const resumeForm = document.getElementById('resumeForm');
+        const jdForm = document.getElementById('jdForm');
+        const statusDiv = document.getElementById('status');
+        const uploadStatus = document.getElementById('uploadStatus');
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Skip button click handler
+            document.getElementById('skipButton').addEventListener('click', skipQuestion);
+            // Resume form submission
+            resumeForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const fileInput = document.getElementById('resumeFile');
+                if (fileInput.files.length === 0) {
+                    showError('Please select a file to upload');
+                    return;
+                }
+
+                const file = fileInput.files[0];
+                const formData = new FormData();
+                formData.append('resumeFile', file);
+                
+                // Read file content as text
+                try {
+                    const text = await file.text();
+                    formData.append('resumeText', text);
+                    await startInterview(formData);
+                } catch (error) {
+                    console.error('Error reading file:', error);
+                    showError('Error reading file. Please try again.');
+                }
+            });
+
+            // Job description form submission
+            jdForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const jdText = document.getElementById('jobDescription').value.trim();
+                if (!jdText) {
+                    showError('Please enter a job description');
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('content', jdText);
+                formData.append('source', 'job_description');
+                
+                await startInterview(formData);
+            });
+
+            // Initialize video recorder when interview starts
+            document.getElementById('startButton').addEventListener('click', startRecording);
+            document.getElementById('stopButton').addEventListener('click', stopRecording);
+            document.getElementById('nextButton').addEventListener('click', nextQuestion);
+        });
+
+        async function startInterview(formData) {
+            try {
+                showStatus('Starting interview...', 'info');
+                
+                // Extract content and source from the form data
+                let content = formData.get('resumeText') || formData.get('jobDescription');
+                const source = formData.get('resumeText') ? 'resume' : 'job_description';
+                
+                // If we have a file, we need to read it as text
+                if (!content && formData.get('resumeFile')) {
+                    const file = formData.get('resumeFile');
+                    content = await file.text();
+                }
+                
+                if (!content) {
+                    throw new Error('No content provided');
+                }
+                
+                console.log('Sending interview start request:', {
+                    content: content ? content.substring(0, 50) + '...' : 'empty',
+                    source: source
+                });
+                
+                // Create URL-encoded form data
+                const params = new URLSearchParams();
+                params.append('content', content);
+                params.append('source', source);
+                
+                const response = await fetch('http://localhost:8000/start-interview', {
+                    method: 'POST',
+                    body: params,
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    let errorDetail = `HTTP ${response.status} ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        errorDetail = errorData.detail || JSON.stringify(errorData);
+                    } catch (e) {
+                        console.error('Error parsing error response:', e);
+                    }
+                    throw new Error(`Failed to start interview: ${errorDetail}`);
+                }
+                
+                const data = await response.json();
+                console.log('Interview started successfully:', data);
+                
+                // Update UI
+                document.getElementById('uploadSection').classList.add('hidden');
+                document.getElementById('interviewSection').classList.remove('hidden');
+                
+                currentInterviewId = data.interview_id;
+                totalQuestions = data.total_questions;
+                
+                // Initialize video recorder
+                videoRecorder = new VideoRecorder();
+                
+                // Reset recording controls
+                document.getElementById('startButton').disabled = false;
+                document.getElementById('stopButton').disabled = true;
+                document.getElementById('nextButton').disabled = true;
+                
+                // Load the first question
+                if (data.first_question) {
+                    await loadQuestion(currentInterviewId, 1);
+                }
+                
+                return data;
+                
+            } catch (error) {
+                console.error('Error starting interview:', error);
+                console.error('Error in startInterview:', error);
+                showError(error.message);
+                throw error;
+            }
+        }
+
+        async function loadQuestion(interviewId, questionId, isSkipped = false) {
+            try {
+                currentInterviewId = interviewId;
+                currentQuestionId = questionId;
+                
+                // Show loading state
+                document.getElementById('questionText').textContent = 'Loading question...';
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('stopButton').disabled = true;
+                document.getElementById('nextButton').disabled = true;
+                document.getElementById('skipButton').style.display = 'inline-block';
+                document.getElementById('skipButton').disabled = false;
+                
+                const response = await fetch(`http://localhost:8000/interview/${interviewId}/question/${questionId}`);
+                if (!response.ok) {
+                    throw new Error('Failed to load question');
+                }
+                
+                const data = await response.json();
+                const question = data.current_question;
+                
+                // Update UI with question details
+                document.getElementById('questionNumber').textContent = questionId;
+                document.getElementById('totalQuestions').textContent = totalQuestions;
+                document.getElementById('questionText').textContent = question.question;
+                
+                // Update question type and difficulty
+                const questionType = document.getElementById('questionType');
+                const questionDifficulty = document.getElementById('questionDifficulty');
+                
+                questionType.textContent = question.type || 'General';
+                questionDifficulty.textContent = question.difficulty || 'Medium';
+                questionDifficulty.setAttribute('data-difficulty', question.difficulty || 'Medium');
+                
+                // Update progress
+                const progress = Math.round((questionId - 1) / totalQuestions * 100);
+                updateProgress(progress);
+                
+                // Reset UI for new question
+                document.getElementById('startButton').disabled = false;
+                document.getElementById('stopButton').disabled = true;
+                document.getElementById('nextButton').disabled = true;
+                document.getElementById('skipButton').disabled = false;
+                document.getElementById('status').textContent = isSkipped ? 'Question skipped. Ready to record your answer.' : 'Ready to record your answer';
+                
+                // Hide the transcription container
+                document.getElementById('transcriptionContainer').style.display = 'none';
+                
+                showStatus('', 'info');
+            } catch (error) {
+                showError(`Error loading question: ${error.message}`);
+                console.error('Question load error:', error);
+            }
+        }
+
+        async function skipQuestion() {
+            if (!currentInterviewId || isSkipping) return;
+            
+            const skipButton = document.getElementById('skipButton');
+            const originalText = skipButton.textContent;
+            skipButton.disabled = true;
+            skipButton.textContent = 'Skipping...';
+            isSkipping = true;
+            
+            try {
+                // Move to next question
+                if (currentQuestionId < totalQuestions) {
+                    await loadQuestion(currentInterviewId, currentQuestionId + 1, true);
+                } else {
+                    // If it's the last question, end the interview
+                    endInterview();
+                }
+            } catch (error) {
+                console.error('Error skipping question:', error);
+                showStatus('Error skipping question. Please try again.', 'error');
+            } finally {
+                skipButton.disabled = false;
+                skipButton.textContent = originalText;
+                isSkipping = false;
+            }
+        }
+
+        function startRecording() {
+            if (videoRecorder) {
+                videoRecorder.startRecording();
+                document.getElementById('startButton').disabled = true;
+                document.getElementById('stopButton').disabled = false;
+                document.getElementById('skipButton').disabled = true; // Disable skip while recording
+                document.getElementById('status').textContent = 'Recording... Click Stop when done.';
+            }
+        }
+
+        async function stopRecording() {
+            if (videoRecorder) {
+                await videoRecorder.stopRecording();
+                document.getElementById('stopButton').disabled = true;
+                document.getElementById('nextButton').disabled = false;
+                document.getElementById('skipButton').disabled = true; // Disable skip after recording
+                document.getElementById('status').textContent = 'Recording stopped. Review your answer or click Next to continue.';
+            }
+        }
+
+        async function nextQuestion() {
+            if (currentQuestionId < totalQuestions) {
+                await loadQuestion(currentInterviewId, currentQuestionId + 1);
+            } else {
+                // Interview complete
+                endInterview();
+            }
+        }
+
+        function endInterview() {
+            // Interview complete
+            showStatus('Congratulations! You have completed the interview.', 'success');
+            document.getElementById('nextButton').disabled = true;
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('stopButton').disabled = true;
+            document.getElementById('skipButton').style.display = 'none'; // Hide skip button at the end
+                
+            // Optionally, show a completion message or redirect
+            alert('Interview completed successfully! Thank you for participating.');
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progress').textContent = percent;
+            document.getElementById('progressBar').style.width = `${percent}%`;
+        }
+
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+            status.style.display = message ? 'block' : 'none';
+        }
+
+        function showError(message) {
+            const status = document.getElementById('uploadStatus');
+            status.textContent = message;
+            status.className = 'status error';
+            status.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
