@@ -87,3 +87,13 @@ yarn-error.log*
 *.njsproj
 *.sln
 *.sw?
+.env
+
+# Environment variables
+.env
+
+# API keys and secrets
+*key.pem
+*cert.pem
+*secret*
+*password*

@@ -172,7 +172,7 @@ class VideoRecorder {
             // Upload to server with progress tracking
             this.showStatus('Uploading your answer... (0%)', 'info');
             
-            const response = await fetch('http://localhost:8000/upload-answer', {
+            const response = await fetch('http://127.0.0.1:8009/upload_answer', {
                 method: 'POST',
                 body: formData,
                 signal: uploadAbortController.signal,

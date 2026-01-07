@@ -330,26 +330,76 @@
             // Skip button click handler
             document.getElementById('skipButton').addEventListener('click', skipQuestion);
             // Resume form submission
-            resumeForm.addEventListener('submit', async (e) => {
+            resumeForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
-                const fileInput = document.getElementById('resumeFile');
-                if (fileInput.files.length === 0) {
-                    showError('Please select a file to upload');
-                    return;
-                }
-
-                const file = fileInput.files[0];
-                const formData = new FormData();
-                formData.append('resumeFile', file);
+                const statusDiv = document.getElementById('status');
                 
-                // Read file content as text
                 try {
-                    const text = await file.text();
-                    formData.append('resumeText', text);
-                    await startInterview(formData);
+                    // Clear previous status
+                    statusDiv.textContent = 'Starting interview...';
+                    statusDiv.className = 'status info';
+
+                    // Get the file input
+                    const fileInput = document.getElementById('resumeFile');
+                    const file = fileInput.files[0];
+                    
+                    if (!file) {
+                        throw new Error('Please select a file to upload');
+                    }
+
+                    // Create FormData and append the file
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('source', 'resume');
+
+                    console.log('Sending file to /upload-resume...');
+                    const response = await fetch('http://127.0.0.1:8009/upload-resume', {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'include',  // Important for CORS
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+
+                    console.log('Response status:', response.status);
+                    
+                    if (!response.ok) {
+                        const error = await response.json().catch(() => ({}));
+                        throw new Error(error.detail || `Server error: ${response.status} ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+                    console.log('Interview started:', data);
+                    
+                    // Update UI with the interview data
+                    window.currentInterviewId = data.interview_id;
+                    window.totalQuestions = data.total_questions;
+                    
+                    // Show interview section
+                    document.getElementById('uploadSection').classList.add('hidden');
+                    document.getElementById('interviewSection').classList.remove('hidden');
+                    
+                    // Initialize video recorder
+                    videoRecorder = new VideoRecorder();
+                    
+                    // Reset recording controls
+                    document.getElementById('startButton').disabled = false;
+                    document.getElementById('stopButton').disabled = true;
+                    document.getElementById('nextButton').disabled = true;
+                    
+                    // Load first question
+                    if (data.first_question) {
+                        console.log('Loading first question:', window.currentInterviewId, data.first_question.id);
+                        await loadQuestion(window.currentInterviewId, data.first_question.id);
+                    } else {
+                        throw new Error('No questions available in the response');
+                    }
                 } catch (error) {
-                    console.error('Error reading file:', error);
-                    showError('Error reading file. Please try again.');
+                    console.error('Error:', error);
+                    statusDiv.textContent = 'Error: ' + error.message;
+                    statusDiv.className = 'status error';
+                    showError(error.message || 'Error uploading file. Please try again.');
                 }
             });
 
@@ -403,7 +453,7 @@
                 params.append('content', content);
                 params.append('source', source);
                 
-                const response = await fetch('http://localhost:8000/start-interview', {
+                const response = await fetch('http://127.0.0.1:8009/start-interview', {
                     method: 'POST',
                     body: params,
                     headers: {
@@ -469,7 +519,7 @@
                 document.getElementById('skipButton').style.display = 'inline-block';
                 document.getElementById('skipButton').disabled = false;
                 
-                const response = await fetch(`http://localhost:8000/interview/${interviewId}/question/${questionId}`);
+                const response = await fetch(`http://127.0.0.1:8009/interview/${interviewId}/question/${questionId}`);
                 if (!response.ok) {
                     throw new Error('Failed to load question');
                 }
@@ -479,7 +529,7 @@
                 
                 // Update UI with question details
                 document.getElementById('questionNumber').textContent = questionId;
-                document.getElementById('totalQuestions').textContent = totalQuestions;
+                document.getElementById('totalQuestions').textContent = data.total_questions || totalQuestions;
                 document.getElementById('questionText').textContent = question.question;
                 
                 // Update question type and difficulty
@@ -494,10 +544,16 @@
                 const progress = Math.round((questionId - 1) / totalQuestions * 100);
                 updateProgress(progress);
                 
+                // Update total questions if provided in the response
+                if (data.total_questions && data.total_questions > 0) {
+                    totalQuestions = data.total_questions;
+                    document.getElementById('totalQuestions').textContent = totalQuestions;
+                }
+                
                 // Reset UI for new question
                 document.getElementById('startButton').disabled = false;
                 document.getElementById('stopButton').disabled = true;
-                document.getElementById('nextButton').disabled = true;
+                document.getElementById('nextButton').disabled = false; // Enable next button
                 document.getElementById('skipButton').disabled = false;
                 document.getElementById('status').textContent = isSkipped ? 'Question skipped. Ready to record your answer.' : 'Ready to record your answer';
                 
@@ -550,17 +606,21 @@
 
         async function stopRecording() {
             if (videoRecorder) {
-                await videoRecorder.stopRecording();
+                videoRecorder.stopRecording();
+                document.getElementById('startButton').disabled = true;
                 document.getElementById('stopButton').disabled = true;
                 document.getElementById('nextButton').disabled = false;
-                document.getElementById('skipButton').disabled = true; // Disable skip after recording
-                document.getElementById('status').textContent = 'Recording stopped. Review your answer or click Next to continue.';
+                document.getElementById('skipButton').disabled = false; // Keep skip enabled
+                document.getElementById('status').textContent = 'Recording stopped. Review your answer, or click Next to continue to the next question.';
             }
         }
 
         async function nextQuestion() {
-            if (currentQuestionId < totalQuestions) {
-                await loadQuestion(currentInterviewId, currentQuestionId + 1);
+            const nextQuestionId = currentQuestionId + 1;
+            console.log(`Moving to question ${nextQuestionId} of ${totalQuestions}`);
+            
+            if (nextQuestionId <= totalQuestions) {
+                await loadQuestion(currentInterviewId, nextQuestionId);
             } else {
                 // Interview complete
                 endInterview();

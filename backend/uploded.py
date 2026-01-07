@@ -16,10 +16,13 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = FastAPI()
 
-# Enable CORS for development
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for development
+    allow_origins=[
+        "http://127.0.0.1:3000",  # Frontend URL
+        "http://localhost:3000",   # Alternative frontend URL
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -30,7 +33,9 @@ app.add_middleware(
 interviews = {}
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("AIzaSyAlPtTvQXMwIIZOSAW7Aq6Ae4kHylhT4sQ"))
+# The API key should be set as an environment variable
+# For example: export OPENAI_API_KEY='your-api-key-here'
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def extract_skills(text: str) -> List[str]:
     """Extract skills from resume text."""
@@ -91,129 +96,150 @@ def extract_projects(text: str) -> List[Dict]:
             # Avoid adding duplicate projects
             if not any(p['name'] == project['name'] for p in projects):
                 projects.append(project)
-                if len(projects) >= 3:  # Limit to 3 projects
-                    break
     
     return projects
 
 def generate_resume_questions(resume_text: str) -> List[Dict[str, str]]:
-    """Generate interview questions based on resume content in a structured order."""
-    print("Generating structured resume-specific questions...")
+    """Generate personalized interview questions based on resume content."""
+    print("Generating personalized resume-specific questions...")
     
-    # Extract key information from resume
+    # Extract structured information
     skills = extract_skills(resume_text)
     experiences = extract_experiences(resume_text)
     projects = extract_projects(resume_text)
     
     questions = []
     
-    # 1. Self Introduction
-    questions.append({
-        "id": len(questions) + 1,
-        "question": "Can you please introduce yourself and tell us about your background?",
-        "difficulty": "Easy",
-        "type": "Introduction",
-        "category": "Basic"
-    })
+    # 1. Self Introduction (First 2 questions)
+    intro_questions = [
+        {
+            "id": 1,
+            "question": "Can you please introduce yourself and tell us about your professional background?",
+            "difficulty": "Easy",
+            "type": "Self-Introduction",
+            "category": "Basic"
+        },
+        {
+            "id": 2,
+            "question": "What motivated you to pursue a career in this field, and what are your key strengths?",
+            "difficulty": "Easy",
+            "type": "Self-Introduction",
+            "category": "Background"
+        }
+    ]
+    questions.extend(intro_questions)
     
-    # 2. Basic Information
-    questions.append({
-        "id": len(questions) + 1,
-        "question": "What motivated you to pursue a career in this field?",
-        "difficulty": "Easy",
-        "type": "Background",
-        "category": "Basic"
-    })
-    
-    # 3. Technical Skills
+    # 2. Basic Skills Questions (Questions 3-4)
     if skills:
-        # Add a general technical question
-        questions.append({
-            "id": len(questions) + 1,
-            "question": "Can you walk us through your technical skills and how you've applied them in your projects?",
-            "difficulty": "Medium",
-            "type": "Technical",
-            "category": "Skills"
-        })
-        
-        # Add specific skill questions
-        for skill in skills[:3]:  # Top 3 skills
+        # Take top 2 skills for basic questions
+        for skill in skills[:2]:
             questions.append({
                 "id": len(questions) + 1,
-                "question": f"Can you describe a specific project where you used {skill} and what challenges you faced?",
-                "difficulty": "Medium",
+                "question": f"How would you rate your proficiency in {skill} and what projects have you used it in?",
+                "difficulty": "Easy",
                 "type": "Technical",
-                "category": "Skills"
+                "category": f"{skill} Basics"
             })
     
-    # 4. Work Experience
-    if experiences:
-        # General experience question
+    # 3. Experience Questions (Middle Questions)
+    for i, exp in enumerate(experiences[:2]):  # Limit to 2 experiences
+        company = exp.get('company', 'your previous role')
+        title = exp.get('title', '')
+        
         questions.append({
             "id": len(questions) + 1,
-            "question": "Can you give us an overview of your professional experience and how it's prepared you for this role?",
+            "question": f"At {company} as a {title}, what were your key responsibilities and achievements?",
             "difficulty": "Medium",
             "type": "Experience",
-            "category": "Work"
+            "category": "Work History"
         })
         
-        # Specific experience questions
-        for exp in experiences[:2]:  # Top 2 experiences
+        # Add a follow-up question about challenges
+        if i == 0:  # Only add one challenge question
             questions.append({
                 "id": len(questions) + 1,
-                "question": f"Tell us about your role at {exp.get('company', 'your previous company')}. What were your key responsibilities and achievements?",
+                "question": f"What was the most challenging project you worked on at {company} and how did you handle it?",
                 "difficulty": "Medium",
-                "type": "Experience",
-                "category": "Work"
+                "type": "Problem-Solving",
+                "category": "Work Challenges"
             })
     
-    # 5. Projects
-    if projects:
-        # General project question
-        questions.append({
-            "id": len(questions) + 1,
-            "question": "Can you tell us about a project you're particularly proud of and what you learned from it?",
-            "difficulty": "Hard",
-            "type": "Project",
-            "category": "Projects"
-        })
-        
-        # Specific project questions
-        for project in projects[:2]:  # Top 2 projects
+    # 4. Advanced Skills Questions (After Experience)
+    if len(skills) > 2:  # If we have more than 2 skills
+        for skill in skills[2:4]:  # Take next 2 skills for advanced questions
             questions.append({
                 "id": len(questions) + 1,
-                "question": f"For your project '{project.get('name', 'this project')}', what was your role, what technologies did you use, and what were the outcomes?",
+                "question": f"Can you explain a complex problem you solved using {skill}? What was your approach and what did you learn?",
                 "difficulty": "Hard",
+                "type": "Technical",
+                "category": f"Advanced {skill}"
+            })
+    
+    # 5. Project Questions (If we need more questions)
+    if len(questions) < 8 and projects:  # If we don't have enough questions yet
+        for proj in projects[:1]:  # Limit to 1 project
+            title = proj.get('title', 'a project')
+            
+            questions.append({
+                "id": len(questions) + 1,
+                "question": f"Tell me about your project '{title}'. What was your role, and what technologies did you use?",
+                "difficulty": "Medium",
                 "type": "Project",
                 "category": "Projects"
             })
     
-    # 6. Behavioral Questions
-    behavioral_questions = [
+    # 6. Future and Closing Questions (Last 2 questions)
+    future_questions = [
         {
-            "id": len(questions) + 1,
-            "question": "Can you describe a time when you faced a significant challenge in a project and how you overcame it?",
-            "difficulty": "Hard",
-            "type": "Behavioral",
-            "category": "Behavioral"
-        },
-        {
-            "id": len(questions) + 2,
-            "question": "How do you approach learning new technologies or skills? Can you give an example?",
-            "difficulty": "Medium",
-            "type": "Behavioral",
-            "category": "Behavioral"
-        },
-        {
-            "id": len(questions) + 3,
-            "question": "Where do you see yourself in your career in the next 3-5 years?",
+            "question": "What technical skills are you currently working to improve, and how are you going about it?",
             "difficulty": "Easy",
-            "type": "Behavioral",
-            "category": "Behavioral"
+            "type": "Career Development",
+            "category": "Future Goals"
+        },
+        {
+            "question": "Where do you see your career in the next 3-5 years, and how does this position align with your goals?",
+            "difficulty": "Medium",
+            "type": "Career Goals",
+            "category": "Future Planning"
         }
     ]
     
-    questions.extend(behavioral_questions)
+    # Add future questions with proper IDs
+    for q in future_questions:
+        questions.append({
+            "id": len(questions) + 1,
+            **q
+        })
+    
+    # Ensure we have at least 10 questions
+    generic_questions = [
+        "Can you describe a time when you had to work under pressure to meet a tight deadline?",
+        "How do you approach learning new technologies or programming languages?",
+        "Can you explain a technical concept to someone who doesn't have a technical background?",
+        "What development tools and IDEs are you most comfortable using, and why?",
+        "How do you handle code reviews and feedback on your work?",
+        "What version control systems have you worked with, and what's your experience with them?",
+        "Can you describe your experience with testing and quality assurance processes?",
+        "How do you stay updated with the latest industry trends and technologies?",
+        "What's your approach to debugging complex issues in your code?",
+        "Can you describe a time when you had to collaborate with a difficult team member and how you handled it?"
+    ]
+    
+    # Add generic questions if we don't have enough
+    while len(questions) < 10 and generic_questions:
+        questions.append({
+            "id": len(questions) + 1,
+            "question": generic_questions.pop(0),
+            "difficulty": "Medium",
+            "type": "General",
+            "category": "Professional Development"
+        })
+    
+    # Ensure we don't have too many questions
+    if len(questions) > 25:
+        questions = questions[:25]
+    
+    print(f"Generated {len(questions)} questions for the interview")
     return questions
 
 def generate_mock_questions(text: str, source: str) -> List[Dict[str, str]]:
@@ -246,12 +272,23 @@ def generate_mock_questions(text: str, source: str) -> List[Dict[str, str]]:
 @app.post("/start-interview/")
 async def start_interview(
     content: str = Form(...),
-    source: str = Form(...)  # "resume" or "job_description"
+    source: str = Form("resume")  # Default to "resume" if not provided
 ):
     """Start a new interview session with text content."""
     try:
+        print(f"Starting interview with source: {source}")
+        print(f"Content length: {len(content)} characters")
+        
         interview_id = f"int_{int(datetime.now().timestamp())}_{uuid.uuid4().hex[:8]}"
-        questions = generate_mock_questions(content, source)
+        
+        # Generate questions based on the source
+        if source == "resume":
+            questions = generate_resume_questions(content)
+        else:  # job_description or other
+            questions = generate_resume_questions(content)  # For now, use the same function
+        
+        if not questions:
+            raise HTTPException(status_code=400, detail="Failed to generate questions from the provided content.")
         
         # Store the interview data
         interviews[interview_id] = {
@@ -263,6 +300,8 @@ async def start_interview(
             "created_at": datetime.now().isoformat()
         }
         
+        print(f"Generated {len(questions)} questions for interview {interview_id}")
+        
         return {
             "interview_id": interview_id,
             "total_questions": len(questions),
@@ -273,29 +312,57 @@ async def start_interview(
 
 @app.post("/upload-resume")
 async def upload_resume(
-    file: UploadFile = File(...),
-    source: str = Form("resume")  # Default to "resume" if not provided
+    file: UploadFile = File(..., description="The resume file to upload"),
+    source: str = Form("resume", description="Source of the upload, defaults to 'resume'")
 ):
     """Handle resume or JD file upload and start interview."""
     try:
+        print(f"Received file upload request: {file.filename}, size: {file.size} bytes")
+        
         # Validate file type
         file_extension = os.path.splitext(file.filename)[1].lower()
-        if file_extension not in ['.pdf', '.docx', '.txt']:
-            raise HTTPException(status_code=400, detail="Unsupported file type. Please upload PDF, DOCX, or TXT.")
+        allowed_extensions = ['.pdf', '.docx', '.txt']
+        if file_extension not in allowed_extensions:
+            error_msg = f"Unsupported file type: {file_extension}. Allowed types: {', '.join(allowed_extensions)}"
+            print(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
         
-        # Read file content
+        # Read file content with size limit (5MB)
+        max_size = 5 * 1024 * 1024  # 5MB
         content = await file.read()
-        text_content = content.decode('utf-8', errors='ignore')
+        
+        if len(content) > max_size:
+            error_msg = f"File too large: {len(content)} bytes. Maximum size is 5MB."
+            print(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Decode content
+        try:
+            text_content = content.decode('utf-8', errors='ignore')
+        except Exception as decode_error:
+            error_msg = f"Error decoding file content: {str(decode_error)}"
+            print(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Log file processing
+        print(f"Processing file: {file.filename}, content length: {len(text_content)} characters")
         
         # If it's a large file, truncate to first 10,000 characters
         if len(text_content) > 10000:
+            print("File content exceeds 10,000 characters, truncating...")
             text_content = text_content[:10000] + "\n\n[Content truncated for processing]"
         
         # Start interview with the extracted text
+        print("Starting interview with extracted text...")
         return await start_interview(content=text_content, source=source)
         
+    except HTTPException as http_err:
+        # Re-raise HTTP exceptions as they are
+        raise http_err
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
+        error_msg = f"Unexpected error processing file: {str(e)}"
+        print(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
 
 @app.get("/interview/{interview_id}/question/{question_id}")
 async def get_question(interview_id: str, question_id: int):
